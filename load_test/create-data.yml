@@ -1,0 +1,14 @@
+---
+
+concurrency: 1
+base: 'http://localhost:5050'
+iterations: 1
+
+plan:
+  - name: Teste
+    request:
+      url: /create_all/serialized/{{ item }}
+    with_items_range:
+      start: 1
+      step: 1
+      stop: 1000

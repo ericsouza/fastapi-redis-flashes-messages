@@ -1,0 +1,20 @@
+---
+
+concurrency: 100
+base: 'http://localhost:5050'
+iterations: 20000
+
+plan:
+  - name: Create
+    request:
+      url: /create_all/serialized/1
+  - name: Get
+    request:
+      url: /user/1/flash/serialized
+  # - name: Teste
+  #   request:
+  #     url: /user/{{ item }}/flash/serialized
+  #   with_items_range:
+  #     start: 1
+  #     step: 1
+  #     stop: 1000
