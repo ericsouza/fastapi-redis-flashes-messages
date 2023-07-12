@@ -6,8 +6,8 @@ authors = ["Eric Souza <ericsouza0801@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+uvicorn = {extras = ["standard"], version = "^0.22.0"}
 fastapi = "^0.100.0"
-uvicorn = "^0.22.0"
 redis = "^4.6.0"
 pydantic-settings = "^2.0.1"
 shortuuid = "^1.0.11"

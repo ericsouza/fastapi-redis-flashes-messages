@@ -1,42 +1,43 @@
 import orjson as json
-from fastapi import FastAPI
-from flashes.redis import init_redis_pool
+from fastapi.responses import ORJSONResponse
+from fastapi import FastAPI, Depends
+from redis.asyncio import Redis
+from flashes.redis import init_redis_pool, get_redis, close_redis_pool
 from shortuuid import uuid
 from flashes import fake
+from typing import Annotated
 
 app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
-    print("startando o repo")
-    app.state.redis = await init_redis_pool()
+    await init_redis_pool()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    print("fechando as conn tudo")
-    await app.state.redis.close()
+    await close_redis_pool()
 
 @app.get("/create_all/hash")
-async def create_all_hash():
+async def create_all_hash(redis: Annotated[Redis, Depends(get_redis)]):
     flashes_content: list[dict] = fake.get_all_flashes()
     keys = []
     for content in flashes_content:
         _key = uuid()
         keys.append(_key)
-        await app.state.redis.hset(_key, mapping=content)
-        await app.state.redis.rpush("user-1", _key)
+        await redis.hset(_key, mapping=content)
+        await redis.rpush("user-1", _key)
     return keys
 
-@app.get("/create_all/serialized")
-async def create_all_serialized():
+@app.get("/create_all/serialized/{id}", response_class=ORJSONResponse)
+async def create_all_serialized(id: int, redis: Annotated[Redis, Depends(get_redis)]):
     flashes_content: list[dict] = fake.get_all_flashes(serialized=True)
     
-    pipeline = app.state.redis.pipeline()
+    pipeline = redis.pipeline()
     for content in flashes_content:
-        pipeline.rpush("user-1-serialized", json.dumps(content))
+        pipeline.rpush(f"user-{id}-serialized", content['msg'])
 
     await pipeline.execute()
-    return {"key": "user-1-serialized"}
+    return ORJSONResponse({"key": f"user-{id}-serialized"})
 
 def from_db_to_json(_from: dict) -> dict:
     return {
@@ -49,23 +50,23 @@ def from_db_to_json_serialized(_from: str) -> dict:
     return json.loads(_from)
 
 @app.get("/user/{id}/flash")
-async def get_messages(id: int):
-    pipeline = app.state.redis.pipeline()
+async def get_messages(id: int, redis: Annotated[Redis, Depends(get_redis)]):
+    pipeline = redis.pipeline()
     pipeline.lrange(f"user-{id}", 0, -1)
     pipeline.delete(f"user-{id}")
     result = await pipeline.execute()
     keys = result[0]
-    pipeline = app.state.redis.pipeline()
+    pipeline = redis.pipeline()
     for key in keys:
         pipeline.hgetall(key)
     messages = await pipeline.execute()
     return [from_db_to_json(msg) for msg in messages]
 
 
-@app.get("/user/{id}/flash/serialized")
-async def get_messages_serialized(id: int):
-    pipeline = app.state.redis.pipeline()
+@app.get("/user/{id}/flash/serialized", response_class=ORJSONResponse)
+async def get_messages_serialized(id: int, redis: Annotated[Redis, Depends(get_redis)]):
+    pipeline = redis.pipeline()
     pipeline.lrange(f"user-{id}-serialized", 0, -1)
     pipeline.delete(f"user-{id}-serialized")
     result = await pipeline.execute()
-    return [from_db_to_json_serialized(msg) for msg in result[0]]
+    return ORJSONResponse(result[0])
